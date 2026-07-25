@@ -1,1 +1,16 @@
-﻿node_modules/
+﻿# dependencies
+node_modules/
+
+# Vite / build output
+dist/
+.vite/
+
+# local env files
+.env
+.env.local
+
+# TypeScript build cache
+tsconfig.tsbuildinfo
+
+# OS files
+.DS_Store
