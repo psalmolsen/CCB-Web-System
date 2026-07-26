@@ -14,3 +14,5 @@ tsconfig.tsbuildinfo
 
 # OS files
 .DS_Store
+
+backend/service-account.json
