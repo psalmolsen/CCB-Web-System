@@ -1,18 +1,102 @@
-﻿# dependencies
-node_modules/
+# ────────────────────────────────────────────────────────────────────────────
+# SECURITY: Sensitive Files & Environment Variables
+# ────────────────────────────────────────────────────────────────────────────
+
+# Environment variables (NEVER commit .env or .env.local)
+.env
+.env.*.local
+.env.local
+.env.production.local
+.env.test.local
+.env.development.local
+
+# Google Cloud / Firebase credentials
+backend/service-account.json
+service-account.json
+service-account*.json
+firebase-adminsdk*.json
+
+# API keys and secrets
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cert
+*.jks
+secrets/
+credentials/
+private/
+keys/
+
+# SSH & GPG keys
+.ssh/
+.gnupg/
+
+# ────────────────────────────────────────────────────────────────────────────
+# Build Output & Caches
+# ────────────────────────────────────────────────────────────────────────────
 
 # Vite / build output
 dist/
+build/
 .vite/
-
-# local env files
-.env
-.env.local
 
 # TypeScript build cache
 tsconfig.tsbuildinfo
+*.tsbuildinfo
 
-# OS files
+# Node dependencies
+node_modules/
+
+# npm / yarn / pnpm
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+pnpm-debug.log
+lerna-debug.log
+.pnp
+.pnp.js
+
+# ────────────────────────────────────────────────────────────────────────────
+# IDE & Editor
+# ────────────────────────────────────────────────────────────────────────────
+
+.vscode/
+.idea/
+.sublime-project
+.sublime-workspace
+*.swp
+*.swo
+*~
 .DS_Store
+Thumbs.db
 
-backend/service-account.json
+# ────────────────────────────────────────────────────────────────────────────
+# OS-specific
+# ────────────────────────────────────────────────────────────────────────────
+
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+desktop.ini
+
+# ────────────────────────────────────────────────────────────────────────────
+# Testing & Coverage
+# ────────────────────────────────────────────────────────────────────────────
+
+coverage/
+.coverage
+.nyc_output/
+
+# ────────────────────────────────────────────────────────────────────────────
+# Local development
+# ────────────────────────────────────────────────────────────────────────────
+
+.env.local
+.env.development
+.env.test
+local.json
