@@ -1,62 +1,48 @@
-// Replaces src/lib/server-functions.ts (createServerFn calls)
-// These call the backend API which handles Google Sheets credentials server-side.
-
-const BASE = "/api";
+﻿import { fetchApi } from "./apiClient";
 
 export async function getTabsFn(): Promise<string[]> {
-  const res = await fetch(`${BASE}/tabs`);
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return fetchApi<string[]>("/api/inventory/tabs");
 }
 
 export async function getMaterialsFn({ data: tabName }: { data: string }): Promise<any[]> {
-  const res = await fetch(`${BASE}/materials?tab=${encodeURIComponent(tabName)}`);
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  const query = tabName ? `?tab=${encodeURIComponent(tabName)}` : "";
+  return fetchApi<any[]>(`/api/inventory${query}`);
 }
 
 export async function stockInFn({ data }: { data: { tabName: string; rowNumber: number; qty: number } }): Promise<{ success: boolean }> {
-  const res = await fetch(`${BASE}/stock-in`, {
+  await fetchApi<null>("/api/inventory/stock-in", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return { success: true };
 }
 
 export async function stockOutFn({ data }: { data: { tabName: string; rowNumber: number; qty: number; day: number } }): Promise<{ success: boolean }> {
-  const res = await fetch(`${BASE}/stock-out`, {
+  await fetchApi<null>("/api/inventory/stock-out", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return { success: true };
 }
 
 export async function editMaterialFn({ data }: { data: { tabName: string; rowNumber: number; values: any } }): Promise<{ success: boolean }> {
-  const res = await fetch(`${BASE}/edit-material`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+  await fetchApi<null>(`/api/inventory/material/${encodeURIComponent(data.rowNumber)}`, {
+    method: "PUT",
+    body: JSON.stringify({ tabName: data.tabName, values: data.values }),
   });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return { success: true };
 }
 
 export async function addMaterialFn({ data }: { data: { tabName: string; values: any } }): Promise<{ success: boolean }> {
-  const res = await fetch(`${BASE}/add-material`, {
+  await fetchApi<null>("/api/inventory/material", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return { success: true };
 }
 
 export async function provisionCurrentMonthFn(): Promise<{ created: string | null }> {
-  const res = await fetch(`${BASE}/provision-month`, { method: "POST" });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return fetchApi<{ created: string | null }>("/api/inventory/provision-month", {
+    method: "POST",
+  });
 }

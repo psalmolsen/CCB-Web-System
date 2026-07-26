@@ -1,25 +1,17 @@
-// Replaces src/lib/station-consumption-server-functions.ts (createServerFn calls)
-
-const BASE = "/api/station-consumption";
+﻿import { fetchApi } from "./apiClient";
 
 export async function getStationConsumptionRecordsFn(): Promise<any[]> {
-  const res = await fetch(`${BASE}/records`);
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return fetchApi<any[]>("/api/station-consumption/records");
 }
 
 export async function getMaterialsFromCurrentMonthFn(): Promise<any[]> {
-  const res = await fetch(`${BASE}/materials`);
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return fetchApi<any[]>("/api/station-consumption/materials/current");
 }
 
 export async function addStationConsumptionRecordFn({ data }: { data: any }): Promise<{ success: boolean }> {
-  const res = await fetch(`${BASE}/add-record`, {
+  await fetchApi<null>("/api/station-consumption/add-record", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return { success: true };
 }

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --configLoader native",
+    "dev:backend": "cd backend && npm run dev",
     "build": "tsc -b && vite --configLoader native build",
     "preview": "vite preview"
   },

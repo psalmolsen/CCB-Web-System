@@ -1,55 +1,42 @@
-// Replaces src/lib/cnf-server-functions.ts (createServerFn calls)
-
-const BASE = "/api/cnf";
+﻿import { fetchApi } from "./apiClient";
 
 export async function getCnfTabsFn(): Promise<string[]> {
-  const res = await fetch(`${BASE}/tabs`);
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return fetchApi<string[]>("/api/cnf/tabs");
 }
 
 export async function getCnfItemsFn({ data: tabName }: { data: string }): Promise<any[]> {
-  const res = await fetch(`${BASE}/items?tab=${encodeURIComponent(tabName)}`);
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  const query = tabName ? `?tab=${encodeURIComponent(tabName)}` : "";
+  return fetchApi<any[]>(`/api/cnf${query}`);
 }
 
 export async function cnfStockInFn({ data }: { data: { tabName: string; rowNumber: number; qty: number } }): Promise<{ success: boolean }> {
-  const res = await fetch(`${BASE}/stock-in`, {
+  await fetchApi<null>("/api/cnf/stock-in", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return { success: true };
 }
 
 export async function cnfStockOutFn({ data }: { data: { tabName: string; rowNumber: number; qty: number; day: number } }): Promise<{ success: boolean }> {
-  const res = await fetch(`${BASE}/stock-out`, {
+  await fetchApi<null>("/api/cnf/stock-out", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return { success: true };
 }
 
 export async function cnfEditItemFn({ data }: { data: { tabName: string; rowNumber: number; values: any } }): Promise<{ success: boolean }> {
-  const res = await fetch(`${BASE}/edit-item`, {
+  await fetchApi<null>("/api/cnf/edit-item", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return { success: true };
 }
 
 export async function addNewCnfFn({ data }: { data: { tabName: string; brand: string; parts: { name: string; variants: string[] }[] } }): Promise<{ success: boolean }> {
-  const res = await fetch(`${BASE}/add-new`, {
+  await fetchApi<null>("/api/cnf/add-new", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return { success: true };
 }

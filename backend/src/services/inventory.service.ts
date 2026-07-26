@@ -1,0 +1,331 @@
+﻿import * as googleSheets from "./googleSheets.service.js";
+import config from "../config/index.js";
+
+const SPREADSHEET_ID = config.MATERIAL_SPREADSHEET_ID || config.SPREADSHEET_ID || "";
+
+export type MaterialItem = {
+  rowNumber: number;
+  date: string;
+  code: string;
+  desc: string;
+  uom: string;
+  price: number | null;
+  initial: number;
+  received: number;
+  balance: number;
+  issued: number;
+  dailyOut: number[];
+  tabName: string;
+  tone: string;
+  initials: string;
+};
+
+const tones = [
+  "from-[#293A92] to-[#4B5FCB]",
+  "from-[#1A2560] to-[#3A4BB0]",
+  "from-[#C0392B] to-[#E56A5D]",
+  "from-[#E9B52D] to-[#F6D163]",
+  "from-[#293A92] to-[#6273D6]",
+];
+
+function getToneForCode(code: string) {
+  let hash = 0;
+  for (let i = 0; i < code.length; i++) {
+    hash = code.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return tones[Math.abs(hash) % tones.length];
+}
+
+function getCellString(row: any[], index: number): string {
+  if (!row || index >= row.length) return "";
+  const val = row[index];
+  return val !== undefined && val !== null ? String(val).trim() : "";
+}
+
+function getCellDouble(row: any[], index: number): number {
+  const val = getCellString(row, index);
+  if (!val) return 0;
+  const parsed = parseFloat(val.replace(/,/g, ""));
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+function getCellPrice(row: any[], index: number): number | null {
+  const val = getCellString(row, index).toLowerCase();
+  if (!val || val === "n/a" || val === "na") return null;
+  const parsed = parseFloat(val.replace(/,/g, ""));
+  return isNaN(parsed) ? null : parsed;
+}
+
+function getColumnLetter(colNum: number): string {
+  let temp;
+  let letter = "";
+  while (colNum > 0) {
+    temp = (colNum - 1) % 26;
+    letter = String.fromCharCode(65 + temp) + letter;
+    colNum = Math.floor((colNum - temp - 1) / 26);
+  }
+  return letter;
+}
+
+async function withSheetsAuthError<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    throw new Error(`${label} Google Sheets request failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+export async function getTabs(): Promise<string[]> {
+  return withSheetsAuthError("Material Monitoring", async () => {
+    const meta = await googleSheets.getSpreadsheet(SPREADSHEET_ID);
+    const sheets = meta.sheets || [];
+    return sheets.map((s: any) => s.properties?.title || "");
+  });
+}
+
+export async function getMaterials(tabName: string): Promise<MaterialItem[]> {
+  return withSheetsAuthError("Material Monitoring", async () => {
+    const meta = await googleSheets.getSpreadsheet(SPREADSHEET_ID);
+    const tabs: string[] = (meta.sheets || []).map((sheet: any) => sheet.properties?.title || "");
+    const effectiveTab = tabName || tabs[0] || "Sheet1";
+    const res = await googleSheets.getValues(SPREADSHEET_ID, `${effectiveTab}!A1:AQ150`);
+    const rows: any[][] = res.values || [];
+    const materials: MaterialItem[] = [];
+
+    for (let i = 4; i < rows.length; i++) {
+      const row = rows[i];
+      const code = getCellString(row, 1);
+      if (code && code.toLowerCase() !== "code" && code.toLowerCase() !== "code no.") {
+        const initials = code.substring(0, Math.min(2, code.length)).toUpperCase();
+        const tone = getToneForCode(code);
+        const initial = getCellDouble(row, 5);
+        const received = getCellDouble(row, 6);
+        const balance = getCellDouble(row, 8);
+        const outQty = getCellDouble(row, 9);
+
+        const dailyOut: number[] = [];
+        for (let day = 1; day <= 31; day++) {
+          dailyOut.push(getCellDouble(row, 11 + (day - 1)));
+        }
+
+        const sumDailyOut = dailyOut.reduce((a, b) => a + b, 0);
+        const totalIssuedVal = getCellDouble(row, 42);
+        const totalIssued = totalIssuedVal > 0 ? totalIssuedVal : sumDailyOut;
+
+        materials.push({
+          rowNumber: i + 1,
+          date: getCellString(row, 0),
+          code,
+          desc: getCellString(row, 2),
+          uom: getCellString(row, 3),
+          price: getCellPrice(row, 4),
+          initial,
+          received,
+          balance: balance || (initial + received - totalIssued),
+          issued: outQty || totalIssued,
+          dailyOut,
+          tabName,
+          tone,
+          initials,
+        });
+      }
+    }
+
+    return materials;
+  });
+}
+
+export async function updateStockIn(tabName: string, rowNumber: number, qty: number): Promise<void> {
+  await withSheetsAuthError("Material Monitoring", async () => {
+    const colG = getColumnLetter(7);
+    const colH = getColumnLetter(8);
+
+    const currentRes = await googleSheets.getValues(SPREADSHEET_ID, `${tabName}!${colG}${rowNumber}:${colH}${rowNumber}`);
+    const currentRow = currentRes.values?.[0] || [];
+    const currentReceived = getCellDouble(currentRow, 0);
+    const currentBalance = getCellDouble(currentRow, 1);
+
+    const newReceived = currentReceived + qty;
+    const newBalance = currentBalance + qty;
+
+    await googleSheets.updateValues(SPREADSHEET_ID, `${tabName}!${colG}${rowNumber}`, [[newReceived]]);
+    await googleSheets.updateValues(SPREADSHEET_ID, `${tabName}!${colH}${rowNumber}`, [[newBalance]]);
+  });
+}
+
+export async function updateStockOut(tabName: string, rowNumber: number, qty: number, day: number): Promise<void> {
+  await withSheetsAuthError("Material Monitoring", async () => {
+    const colNumber = 12 + (day - 1);
+    const colLetter = getColumnLetter(colNumber);
+
+    await googleSheets.updateValues(SPREADSHEET_ID, `${tabName}!${colLetter}${rowNumber}`, [[qty]]);
+  });
+}
+
+export async function updateMaterial(
+  tabName: string,
+  rowNumber: number,
+  data: {
+    date: string;
+    code: string;
+    desc: string;
+    uom: string;
+    price: number | null;
+    initial: number;
+    received: number;
+    balance: number;
+    issued: number;
+  }
+): Promise<void> {
+  await withSheetsAuthError("Material Monitoring", async () => {
+    const values = [
+      data.date,
+      data.code,
+      data.desc,
+      data.uom,
+      data.price === null ? "N/A" : data.price,
+      data.initial,
+      data.received,
+      "",
+      data.balance,
+      data.issued,
+    ];
+
+    await googleSheets.updateValues(SPREADSHEET_ID, `${tabName}!A${rowNumber}:J${rowNumber}`, [values]);
+  });
+}
+
+export async function addMaterial(
+  tabName: string,
+  data: {
+    date: string;
+    code: string;
+    desc: string;
+    uom: string;
+    price: number | null;
+    initial: number;
+    received: number;
+    balance: number;
+    issued: number;
+  }
+): Promise<void> {
+  await withSheetsAuthError("Material Monitoring", async () => {
+    const values = [
+      data.date,
+      data.code,
+      data.desc,
+      data.uom,
+      data.price === null ? "N/A" : data.price,
+      data.initial,
+      data.received,
+      "",
+      data.balance,
+      data.issued,
+    ];
+
+    for (let d = 1; d <= 31; d++) {
+      values.push("");
+    }
+    values.push(0);
+
+    await googleSheets.appendValues(SPREADSHEET_ID, `${tabName}!A5:AQ`, [values]);
+  });
+}
+
+export async function addInventory(tabName: string, data: any): Promise<void> {
+  return addMaterial(tabName, data);
+}
+
+export async function updateInventory(tabName: string, id: number, data: any): Promise<void> {
+  return updateMaterial(tabName, id, data);
+}
+
+export async function deleteInventory(_id: number): Promise<void> {
+  throw new Error("Delete operation is not supported for inventory rows");
+}
+
+const MONTH_SHORT = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+const MONTH_FULL = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
+
+function resolveTabName(monthIdx: number, existingTabs: string[]): string {
+  const usesFullNames = existingTabs.some((tab) =>
+    MONTH_FULL.some((full) => full.toLowerCase() === tab.toLowerCase())
+  );
+  return usesFullNames ? MONTH_FULL[monthIdx] : MONTH_SHORT[monthIdx];
+}
+
+function findMostRecentTab(existingTabs: string[], currentMonthIdx: number): string | null {
+  const startMonth = currentMonthIdx === 0 ? 11 : currentMonthIdx - 1;
+  for (let m = startMonth; m >= 0; m--) {
+    const short = MONTH_SHORT[m];
+    const full = MONTH_FULL[m];
+    const found = existingTabs.find(
+      (t) => t.toLowerCase() === short.toLowerCase() || t.toLowerCase() === full.toLowerCase()
+    );
+    if (found) return found;
+  }
+  for (let m = 11; m > startMonth; m--) {
+    const short = MONTH_SHORT[m];
+    const full = MONTH_FULL[m];
+    const found = existingTabs.find(
+      (t) => t.toLowerCase() === short.toLowerCase() || t.toLowerCase() === full.toLowerCase()
+    );
+    if (found) return found;
+  }
+  return existingTabs.length > 0 ? existingTabs[existingTabs.length - 1] : null;
+}
+
+export async function provisionCurrentMonth(): Promise<string | null> {
+  return withSheetsAuthError("Material Monitoring", async () => {
+    const today = new Date();
+    const monthIdx = today.getMonth();
+
+    const meta = await googleSheets.getSpreadsheet(SPREADSHEET_ID);
+    const existingTabs: string[] = (meta.sheets || []).map((s: any) => s.properties?.title || "");
+
+    const currentTab = resolveTabName(monthIdx, existingTabs);
+    const alreadyExists = existingTabs.some((t) => t.toLowerCase() === currentTab.toLowerCase());
+    if (alreadyExists) {
+      console.log(`[MonthProvisioner] Tab "${currentTab}" already exists. Skipping.`);
+      return null;
+    }
+
+    const sourceTab = findMostRecentTab(existingTabs, monthIdx);
+    if (!sourceTab) {
+      console.warn("[MonthProvisioner] No source tab found. Skipping provisioning.");
+      return null;
+    }
+
+    console.log(`[MonthProvisioner] Creating "${currentTab}" from "${sourceTab}"...`);
+
+    await googleSheets.batchUpdate(SPREADSHEET_ID, {
+      requests: [
+        {
+          addSheet: { properties: { title: currentTab } },
+        },
+      ],
+    });
+
+    const sourceRes = await googleSheets.getValues(SPREADSHEET_ID, `${sourceTab}!A1:AQ150`);
+    const sourceRows: any[][] = sourceRes.values || [];
+
+    if (sourceRows.length >= 4) {
+      await googleSheets.updateValues(SPREADSHEET_ID, `${currentTab}!A1`, sourceRows.slice(0, 4));
+    }
+
+    const materialRows: any[][] = [];
+    for (let i = 4; i < sourceRows.length; i++) {
+      const src = sourceRows[i];
+      if (!src || !src[1] || String(src[1]).trim() === "") continue;
+
+      materialRows.push([src[0] || "", src[1] || "", src[2] || "", src[3] || "", src[4] || "", src[8] || 0]);
+    }
+
+    if (materialRows.length > 0) {
+      await googleSheets.updateValues(SPREADSHEET_ID, `${currentTab}!A5`, materialRows);
+    }
+
+    console.log(`[MonthProvisioner] Tab "${currentTab}" created successfully with ${materialRows.length} material rows.`);
+    return currentTab;
+  });
+}
