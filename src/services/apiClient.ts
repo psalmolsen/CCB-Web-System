@@ -11,9 +11,24 @@ export async function fetchApi<T>(path: string, init: RequestInit = {}): Promise
     ...init,
   });
 
-  const json = (await response.json()) as ApiResponse<T>;
-  if (!response.ok || !json.success) {
-    throw new Error(json.message || `API request failed: ${response.status}`);
+  const rawText = await response.text();
+  let json: Partial<ApiResponse<T>> | null = null;
+
+  if (rawText) {
+    try {
+      json = JSON.parse(rawText) as Partial<ApiResponse<T>>;
+    } catch {
+      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    }
   }
+
+  if (!response.ok) {
+    throw new Error(json?.message || rawText || `API request failed: ${response.status}`);
+  }
+
+  if (!json?.success) {
+    throw new Error(json?.message || `API request failed: ${response.status}`);
+  }
+
   return json.data as T;
 }
